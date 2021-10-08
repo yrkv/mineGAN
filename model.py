@@ -35,6 +35,22 @@ class UpBlockDual(nn.Module):
         return torch.cat([a, b], dim=1)
 
 
+class UpBlockSkip(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super().__init__()
+        assert in_ch == out_ch*2
+        self.up =   nn.Upsample(scale_factor=2, mode='nearest')
+        self.conv = nn.Conv2d(in_ch, out_ch*2, 3, 1, 1, bias=False)
+        self.bn =   nn.BatchNorm2d(out_ch*2)
+        self.glu =  nn.GLU(dim=1)
+
+    def forward(self, feat):
+        x = self.up(feat)
+        y = self.conv(x)
+        y = self.bn(x + y)
+        return self.glu(y)
+        
+
 
 class Generator(nn.Module):
     def __init__(self, config):
@@ -68,10 +84,10 @@ class Generator(nn.Module):
             # nn.Dropout2d(dropout),
         )
 
-        self.feat_8 = UpBlockDual(nfc[4], nfc[8])
-        self.feat_16 = UpBlockDual(nfc[8], nfc[16])
-        self.feat_32 = UpBlockDual(nfc[16], nfc[32])
-        self.feat_64 = UpBlockDual(nfc[32], nfc[64])
+        self.feat_8 = UpBlockSkip(nfc[4], nfc[8])
+        self.feat_16 = UpBlockSkip(nfc[8], nfc[16])
+        self.feat_32 = UpBlockSkip(nfc[16], nfc[32])
+        self.feat_64 = UpBlockSkip(nfc[32], nfc[64])
         # self.feat_64 = UpBlock(nfc[32], nc)
 
         self.to_64 = nn.Sequential(
