@@ -10,15 +10,30 @@ def weights_init(m):
         m.bias.data.fill_(0)
 
 
-def UpBlock(in_ch, out_ch, dropout=0.0):
-    # TODO: try other upscaling blocks
+# TODO: try other upscaling blocks
+def UpBlock(in_ch, out_ch):
     return nn.Sequential(
         nn.Upsample(scale_factor=2, mode='nearest'),
         nn.Conv2d(in_ch, out_ch*2, 3, 1, 1, bias=False),
         nn.BatchNorm2d(out_ch*2),
         nn.GLU(dim=1),
-        nn.Dropout2d(dropout),
     )
+
+class UpBlockDual(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super().__init__()
+        self.main = UpBlock(in_ch, out_ch//2)
+        self.dcgan_up = nn.Sequential(
+            nn.ConvTranspose2d(in_ch, out_ch//2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(out_ch//2),
+            nn.ReLU(),
+        )
+
+    def forward(self, feat):
+        a = self.main(feat)
+        b = self.dcgan_up(feat)
+        return torch.cat([a, b], dim=1)
+
 
 
 class Generator(nn.Module):
@@ -30,8 +45,6 @@ class Generator(nn.Module):
         nz = config['nz']
         ngf = config['ngf']
 
-        dropout = config['g_dropout']
-
         nfc_base = {4:16, 8:8, 16:4, 32:2, 64:1}
         nfc = {k:int(v*ngf) for k,v in nfc_base.items()}
 
@@ -39,7 +52,6 @@ class Generator(nn.Module):
             nn.ConvTranspose2d(nz, nfc[4]*2, 4, 1, 0, bias=False),
             nn.BatchNorm2d(nfc[4]*2),
             nn.GLU(dim=1),
-            nn.Dropout2d(dropout),
             # nn.SiLU(inplace=True),
             
 #             nn.ConvTranspose2d(nfc[4], nfc[4], 3, 1, 1, bias=False),
@@ -56,10 +68,10 @@ class Generator(nn.Module):
             # nn.Dropout2d(dropout),
         )
 
-        self.feat_8 = UpBlock(nfc[4], nfc[8], dropout)
-        self.feat_16 = UpBlock(nfc[8], nfc[16], dropout)
-        self.feat_32 = UpBlock(nfc[16], nfc[32], dropout)
-        self.feat_64 = UpBlock(nfc[32], nfc[64], dropout)
+        self.feat_8 = UpBlockDual(nfc[4], nfc[8])
+        self.feat_16 = UpBlockDual(nfc[8], nfc[16])
+        self.feat_32 = UpBlockDual(nfc[16], nfc[32])
+        self.feat_64 = UpBlockDual(nfc[32], nfc[64])
         # self.feat_64 = UpBlock(nfc[32], nc)
 
         self.to_64 = nn.Sequential(

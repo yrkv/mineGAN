@@ -10,14 +10,15 @@ from torchvision.transforms.functional import to_pil_image
 from torchvision.utils import make_grid
 
 import os
-from glob import glob
+import time
 import random
-from tqdm import tqdm
+import string
 import argparse
 import itertools
 import numpy as np
 import pandas as pd
-import string
+from glob import glob
+from tqdm import tqdm
 
 import model
 # from diffaug import DiffAugment
@@ -119,6 +120,7 @@ def train(args):
     steps = 0
 
     for epoch in range(start_epoch, args['epochs']):
+        epoch_start_time = time.time()
         epoch_log = []
 
         data_iter = enumerate(dataloader)
@@ -160,10 +162,11 @@ def train(args):
 
         
         df = pd.DataFrame(epoch_log)
-        err_dr = df['err_dr'].mean().round(4)
-        err_df = df['err_df'].mean().round(4)
-        err_g = df['err_g'].mean().round(4)
-        print(f'Epochs: {epoch+1},  {err_dr=}, {err_df=}, {err_g=}')
+        err_dr = df['err_dr'].mean()
+        err_df = df['err_df'].mean()
+        err_g = df['err_g'].mean()
+        t = time.time() - epoch_start_time
+        print(f'Epochs: {epoch+1}, {t=:.1f},  {err_dr=:.4f}, {err_df=:.4f}, {err_g=:.4f}')
 
         with torch.no_grad():
             im = to_pil_image(make_grid(netG(fixed_noise), normalize=True, value_range=(-1,1)))
