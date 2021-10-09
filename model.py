@@ -259,7 +259,7 @@ class Discriminator(nn.Module):
         nfc = {k:int(v*ndf) for k,v in nfc_base.items()}
 
         self.start_block = nn.Sequential(
-            nn.Conv2d(nc, nfc[32], 4, 2, 1, bias=False),
+            nn.Conv2d(nc, nfc[128], 4, 2, 1, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout2d(dropout),
         )
