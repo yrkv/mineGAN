@@ -9,6 +9,22 @@ def weights_init(m):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
+class SEBlock(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super().__init__()
+
+        self.main = nn.Sequential(
+            nn.AdaptiveAvgPool2d((4,4)),
+            nn.Conv2d(in_ch, out_ch, 4, 1, 0, bias=False),
+            nn.LeakyReLU(0.1),
+            nn.Conv2d(out_ch, out_ch, 1, 1, 0, bias=False),
+            nn.Sigmoid(), # TODO: try others, like linear or tanh
+        )
+
+    def forward(self, small, large):
+        #TODO: neutral param rename
+        return large * self.main(small)
+
 
 # TODO: try other upscaling blocks
 def UpBlock(in_ch, out_ch):
@@ -88,6 +104,11 @@ class Generator(nn.Module):
         self.feat_16 = UpBlock(nfc[8], nfc[16])
         self.feat_32 = UpBlock(nfc[16], nfc[32])
         self.feat_64 = UpBlock(nfc[32], nfc[64])
+
+
+        self.se_32 = SEBlock(nfc[8], nfc[32])
+        self.se_64 = SEBlock(nfc[16], nfc[64])
+
         # self.feat_64 = UpBlock(nfc[32], nc)
 
         self.to_64 = nn.Sequential(
@@ -105,8 +126,12 @@ class Generator(nn.Module):
         feat_4 = self.init(noise)
         feat_8 = self.feat_8(feat_4)
         feat_16 = self.feat_16(feat_8)
-        feat_32 = self.feat_32(feat_16)
-        feat_64 = self.feat_64(feat_32)
+
+        feat_32 = self.se_32(feat_8, self.feat_32(feat_16))
+        feat_64 = self.se_64(feat_16, self.feat_64(feat_32))
+
+        #feat_32 = self.feat_32(feat_16)
+        #feat_64 = self.feat_64(feat_32)
 
         return self.to_64(feat_64)
 
