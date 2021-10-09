@@ -29,7 +29,7 @@ criterion = nn.BCELoss()
 model_config_args = {
     'nc', 'nz', 'ngf', 'ndf', 'lr', 'beta1',
 
-    'g_dropout',
+    #'g_dropout',
 
     'd_dropout',
 }
@@ -174,7 +174,7 @@ def train(args):
             im.save(image_path)
 
         # checkpoint every (--ckpt_every) epochs
-        if (epoch+1) % args['ckpt_every'] == 0:
+        if args['ckpt_every'] != 0 and (epoch+1) % args['ckpt_every'] == 0:
             checkpoint_path = os.path.join(save_dir, f'checkpoints/minetestgan_{epoch+1:04}.pt')
             torch.save({
                 'netG_state_dict': netG.state_dict(),
@@ -198,7 +198,8 @@ if __name__ == "__main__":
     parser.add_argument('--ckpt', type=str, default='last',
             help='checkpoint weight path, or \'last\' to use most recent. To '
             'use checkpointing, provide a --name or a random one is generated.')
-    parser.add_argument('--ckpt_every', type=int, default=10, help='checkpoint every N epochs')
+    parser.add_argument('--ckpt_every', type=int, default=0,
+            help='checkpoint every N epochs. If 0, disable checkpointing.')
     parser.add_argument('--results_dir', type=str, default='train_results',
             help='directory dump train results and search for checkpoints')
     parser.add_argument('--name', type=str, default=None, help='experiment name (default: randomly generated)')
@@ -214,7 +215,7 @@ if __name__ == "__main__":
     parser.add_argument('--beta1', type=float, default=0.5, help='')
 
     parser.add_argument('--d_dropout', type=float, default=0.0, help='')
-    parser.add_argument('--g_dropout', type=float, default=0.0, help='')
+    #parser.add_argument('--g_dropout', type=float, default=0.0, help='')
 
 
 #     'BN_momentum': 0.8,
