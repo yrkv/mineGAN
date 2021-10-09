@@ -77,7 +77,7 @@ class Generator(nn.Module):
         nz = config['nz']
         ngf = config['ngf']
 
-        nfc_base = {4:16, 8:8, 16:4, 32:2, 64:1}
+        nfc_base = {4:64, 8:32, 16:16, 32:8, 64:4, 128:2, 256:1}
         nfc = {k:int(v*ngf) for k,v in nfc_base.items()}
 
         self.init = nn.Sequential(
@@ -110,6 +110,8 @@ class Generator(nn.Module):
         self.feat_16 = self.up_block(nfc[8], nfc[16])
         self.feat_32 = self.up_block(nfc[16], nfc[32])
         self.feat_64 = self.up_block(nfc[32], nfc[64])
+        self.feat_128 = self.up_block(nfc[64], nfc[128])
+        #self.feat_128 = self.up_block(nfc[64], nfc[128])
 
 
         #self.se_32 = SEBlock(nfc[8], nfc[32])
@@ -117,10 +119,17 @@ class Generator(nn.Module):
 
         # self.feat_64 = UpBlock(nfc[32], nc)
 
-        self.to_64 = nn.Sequential(
+        #self.to_64 = nn.Sequential(
 #             nn.Upsample(scale_factor=2, mode='nearest'),
 #             nn.Conv2d(nfc[32], nc, 3, 1, 1, bias=False),
-            nn.Conv2d(nfc[64], nc, 3, 1, 1, bias=False),
+            #nn.Conv2d(nfc[64], nc, 3, 1, 1, bias=False),
+            #nn.Tanh(),
+        #)
+
+        self.to_256 = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(nfc[128], nc, 3, 1, 1, bias=False),
+            #nn.Conv2d(nfc[256], nc, 3, 1, 1, bias=False),
             nn.Tanh(),
         )
 
@@ -138,8 +147,10 @@ class Generator(nn.Module):
 
         feat_32 = self.feat_32(feat_16)
         feat_64 = self.feat_64(feat_32)
+        feat_128 = self.feat_128(feat_64)
 
-        return self.to_64(feat_64)
+        #return self.to_64(feat_64)
+        return self.to_256(feat_128)
 
 
 class GeneratorOld(nn.Module):
@@ -244,7 +255,7 @@ class Discriminator(nn.Module):
 
         dropout = config['d_dropout']
 
-        nfc_base = {2:32, 4:16, 8:8, 16:4, 32:2}
+        nfc_base = {4:64, 8:32, 16:16, 32:8, 64:4, 128:2, 256:1}
         nfc = {k:int(v*ndf) for k,v in nfc_base.items()}
 
         self.start_block = nn.Sequential(
@@ -253,6 +264,8 @@ class Discriminator(nn.Module):
             nn.Dropout2d(dropout),
         )
 
+        self.down_to_64 = DownBlock(nfc[128], nfc[64], dropout)
+        self.down_to_32 = DownBlock(nfc[64], nfc[32], dropout)
         self.down_to_16 = DownBlock(nfc[32], nfc[16], dropout)
         self.down_to_8 = DownBlock(nfc[16], nfc[8], dropout)
         self.down_to_4 = DownBlock(nfc[8], nfc[4], dropout)
@@ -266,7 +279,9 @@ class Discriminator(nn.Module):
         #if self.training and self.config['d_noise'] > 0:
             #x = x + self.config['d_noise']*torch.randn_like(x)
 
-        feat_32 = self.start_block(image)
+        feat_128 = self.start_block(image)
+        feat_64 = self.down_to_64(feat_128)
+        feat_32 = self.down_to_32(feat_64)
         feat_16 = self.down_to_16(feat_32)
         feat_8 = self.down_to_8(feat_16)
         feat_4 = self.down_to_4(feat_8)
