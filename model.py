@@ -256,6 +256,9 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, image):
+        if self.training and self.config['d_noise'] > 0:
+            x = x + self.config['d_noise']*torch.randn_like(x)
+
         feat_32 = self.start_block(image)
         feat_16 = self.down_to_16(feat_32)
         feat_8 = self.down_to_8(feat_16)

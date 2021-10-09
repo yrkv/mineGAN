@@ -32,6 +32,7 @@ model_config_args = {
     #'g_dropout',
 
     'd_dropout',
+    'd_noise',
 }
 
 
@@ -215,6 +216,7 @@ if __name__ == "__main__":
     parser.add_argument('--beta1', type=float, default=0.5, help='')
 
     parser.add_argument('--d_dropout', type=float, default=0.0, help='')
+    parser.add_argument('--d_noise', type=float, default=0.0, help='')
     #parser.add_argument('--g_dropout', type=float, default=0.0, help='')
 
 
