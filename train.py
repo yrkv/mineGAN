@@ -29,10 +29,11 @@ criterion = nn.BCELoss()
 model_config_args = {
     'nc', 'nz', 'ngf', 'ndf', 'lr', 'beta1',
 
-    #'g_dropout',
-
     'd_dropout',
     'd_noise',
+
+    #'g_dropout',
+    'g_up_block',
 }
 
 
@@ -52,13 +53,22 @@ def near_zero_like(input, rand_range=0.1):
 
 def train_d(net, data, label="real"):
     pred = net(data)
+    if pred.dim() > 1:
+        pred_mean = pred.mean(list(range(1, pred.dim()))).round()
+    else:
+        pred_mean = pred.round()
     if label=="real":
         target = near_zero_like(pred)
+        target_mean = 0
     else:
         target = near_one_like(pred)
+        target_mean = 1
+
     err = criterion(pred, target)
     err.backward()
-    return err.mean().item()
+
+    n_correct = (pred_mean == target_mean).mean()
+    return err.mean().item(), p_correct
 
 
 def load_checkpoint(ckpt, ckpt_dir):
@@ -141,8 +151,8 @@ def train(args):
 
             # train Discriminator
             netD.zero_grad()
-            err_dr = train_d(netD, real_images, label="real")
-            err_df = train_d(netD, fake_images.detach(), label="fake")
+            err_dr, c_dr = train_d(netD, real_images, label="real")
+            err_df, c_df = train_d(netD, fake_images.detach(), label="fake")
             optD.step()
 
             # train Generator
@@ -157,17 +167,24 @@ def train(args):
 
             epoch_log.append({
                 'err_dr': err_dr,
+                'c_dr': c_dr,
                 'err_df': err_df,
+                'c_df': c_df,
                 'err_g': err_g.item(),
             })
 
         
         df = pd.DataFrame(epoch_log)
         err_dr = df['err_dr'].mean()
+        c_dr = df['c_dr'].mean()
         err_df = df['err_df'].mean()
+        c_df = df['c_df'].mean()
         err_g = df['err_g'].mean()
         t = time.time() - epoch_start_time
-        print(f'Epochs: {epoch+1}, {t=:.1f},  {err_dr=:.4f}, {err_df=:.4f}, {err_g=:.4f}')
+        print(f'Epochs: {epoch+1}, {t=:.1f}, '
+                ' {err_dr=:.4f}, {c_dr=:.4f}, '
+                ' {err_df=:.4f}, {c_df=:.4f}, '
+                ' {err_g=:.4f}')
 
         with torch.no_grad():
             im = to_pil_image(make_grid(netG(fixed_noise), normalize=True, value_range=(-1,1)))
@@ -217,7 +234,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--d_dropout', type=float, default=0.0, help='')
     parser.add_argument('--d_noise', type=float, default=0.0, help='')
+
     #parser.add_argument('--g_dropout', type=float, default=0.0, help='')
+    parser.add_argument('--g_up_block', type=str, default='UpBlock', help='')
 
 
 #     'BN_momentum': 0.8,

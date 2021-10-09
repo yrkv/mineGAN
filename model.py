@@ -63,8 +63,8 @@ class UpBlockSkip(nn.Module):
     def forward(self, feat):
         x = self.up(feat)
         y = self.conv(x)
-        y = self.bn(x + y)
-        return self.glu(y)
+        #y = self.bn(x + y)
+        return self.glu(x + y)
         
 
 
@@ -100,14 +100,20 @@ class Generator(nn.Module):
             # nn.Dropout2d(dropout),
         )
 
-        self.feat_8 = UpBlock(nfc[4], nfc[8])
-        self.feat_16 = UpBlock(nfc[8], nfc[16])
-        self.feat_32 = UpBlock(nfc[16], nfc[32])
-        self.feat_64 = UpBlock(nfc[32], nfc[64])
+        self.up_block = {
+            'UpBlock': UpBlock,
+            'UpBlockSkip': UpBlockSkip,
+            'UpBlockDual': UpBlockDual,
+        }[config['g_up_block']]
+
+        self.feat_8 = self.up_block(nfc[4], nfc[8])
+        self.feat_16 = self.up_block(nfc[8], nfc[16])
+        self.feat_32 = self.up_block(nfc[16], nfc[32])
+        self.feat_64 = self.up_block(nfc[32], nfc[64])
 
 
-        self.se_32 = SEBlock(nfc[8], nfc[32])
-        self.se_64 = SEBlock(nfc[16], nfc[64])
+        #self.se_32 = SEBlock(nfc[8], nfc[32])
+        #self.se_64 = SEBlock(nfc[16], nfc[64])
 
         # self.feat_64 = UpBlock(nfc[32], nc)
 
@@ -127,11 +133,11 @@ class Generator(nn.Module):
         feat_8 = self.feat_8(feat_4)
         feat_16 = self.feat_16(feat_8)
 
-        feat_32 = self.se_32(feat_8, self.feat_32(feat_16))
-        feat_64 = self.se_64(feat_16, self.feat_64(feat_32))
+        #feat_32 = self.se_32(feat_8, self.feat_32(feat_16))
+        #feat_64 = self.se_64(feat_16, self.feat_64(feat_32))
 
-        #feat_32 = self.feat_32(feat_16)
-        #feat_64 = self.feat_64(feat_32)
+        feat_32 = self.feat_32(feat_16)
+        feat_64 = self.feat_64(feat_32)
 
         return self.to_64(feat_64)
 
