@@ -67,7 +67,7 @@ def train_d(net, data, label="real"):
     err = criterion(pred, target)
     err.backward()
 
-    n_correct = (pred_mean == target_mean).mean()
+    n_correct = (pred_mean == target_mean).float().mean()
     return err.mean().item(), p_correct
 
 
