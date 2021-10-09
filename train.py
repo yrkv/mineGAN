@@ -182,9 +182,9 @@ def train(args):
         err_g = df['err_g'].mean()
         t = time.time() - epoch_start_time
         print(f'Epochs: {epoch+1}, {t=:.1f}, '
-                ' {err_dr=:.4f}, {c_dr=:.4f}, '
-                ' {err_df=:.4f}, {c_df=:.4f}, '
-                ' {err_g=:.4f}')
+                f' {err_dr=:.4f}, {c_dr=:.4f}, '
+                f' {err_df=:.4f}, {c_df=:.4f}, '
+                f' {err_g=:.4f}')
 
         with torch.no_grad():
             im = to_pil_image(make_grid(netG(fixed_noise), normalize=True, value_range=(-1,1)))
