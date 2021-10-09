@@ -221,22 +221,10 @@ class GeneratorOld(nn.Module):
         return self.main(x)
 
 
-class NoiseInjection(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        self.weight = nn.Parameter(torch.zeros(1), requires_grad=True)
-
-    def forward(self, feat, noise=None):
-        if noise is None:
-            noise = torch.randn_like(feat)
-
-        return feat + self.weight * noise
 
 def DownBlock(in_planes, out_planes, dropout=0.0):
     return nn.Sequential(
         nn.Conv2d(in_planes, out_planes, 4, 2, 1, bias=False),
-        NoiseInjection(),
         nn.BatchNorm2d(out_planes),
         nn.LeakyReLU(0.2, inplace=True),
         nn.Dropout2d(dropout),
@@ -260,7 +248,6 @@ class Discriminator(nn.Module):
         nfc = {k:int(v*ndf) for k,v in nfc_base.items()}
 
         self.start_block = nn.Sequential(
-            NoiseInjection(),
             nn.Conv2d(nc, nfc[32], 4, 2, 1, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout2d(dropout),
