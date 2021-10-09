@@ -84,10 +84,10 @@ class Generator(nn.Module):
             # nn.Dropout2d(dropout),
         )
 
-        self.feat_8 = UpBlockSkip(nfc[4], nfc[8])
-        self.feat_16 = UpBlockSkip(nfc[8], nfc[16])
-        self.feat_32 = UpBlockSkip(nfc[16], nfc[32])
-        self.feat_64 = UpBlockSkip(nfc[32], nfc[64])
+        self.feat_8 = UpBlock(nfc[4], nfc[8])
+        self.feat_16 = UpBlock(nfc[8], nfc[16])
+        self.feat_32 = UpBlock(nfc[16], nfc[32])
+        self.feat_64 = UpBlock(nfc[32], nfc[64])
         # self.feat_64 = UpBlock(nfc[32], nc)
 
         self.to_64 = nn.Sequential(

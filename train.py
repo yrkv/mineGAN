@@ -43,10 +43,10 @@ model_config_args = {
 #    model.apply(to_apply)
 
 
-def near_one_like(input, rand_range=0.0):
+def near_one_like(input, rand_range=0.1):
     return 1 - torch.rand_like(input)*rand_range
 
-def near_zero_like(input, rand_range=0.0):
+def near_zero_like(input, rand_range=0.1):
     return torch.rand_like(input)*rand_range
 
 def train_d(net, data, label="real"):
