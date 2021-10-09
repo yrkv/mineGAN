@@ -30,7 +30,7 @@ model_config_args = {
     'nc', 'nz', 'ngf', 'ndf', 'lr', 'beta1',
 
     'd_dropout',
-    'd_noise',
+    #'d_noise',
 
     #'g_dropout',
     'g_up_block',
@@ -233,7 +233,7 @@ if __name__ == "__main__":
     parser.add_argument('--beta1', type=float, default=0.5, help='')
 
     parser.add_argument('--d_dropout', type=float, default=0.0, help='')
-    parser.add_argument('--d_noise', type=float, default=0.0, help='')
+    #parser.add_argument('--d_noise', type=float, default=0.0, help='')
 
     #parser.add_argument('--g_dropout', type=float, default=0.0, help='')
     parser.add_argument('--g_up_block', type=str, default='UpBlock', help='')
