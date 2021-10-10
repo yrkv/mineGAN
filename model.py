@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -284,7 +285,10 @@ class Discriminator(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, image):
+        # decoder applied to end of main backbone
+        self.decoder_big = SimpleDecoder(nfc[8], nc, ndf=ndf)
+
+    def forward(self, image, label='fake'):
         #if self.training and self.config['d_noise'] > 0:
             #x = x + self.config['d_noise']*torch.randn_like(x)
 
@@ -297,7 +301,43 @@ class Discriminator(nn.Module):
 
         rf = self.rf_main(feat_4)
 
-        return rf
+        small_image = F.interpolate(image, size=64)
+
+        if label == 'real':
+            rec_img_big = self.decoder_big(feat_8)
+
+            return rf, rec_img_big
+
+        return rf,
+
+
+class SimpleDecoder(nn.Module):
+    def __init__(self, nfc_in=64, nc=3, ndf=16):
+        super(SimpleDecoder, self).__init__()
+
+        nfc_base = {4:64, 8:32, 16:16, 32:8, 64:4, 128:2, 256:1}
+        nfc = {k:int(v*ndf) for k,v in nfc_base.items()}
+
+        # def upBlock(in_planes, out_planes):
+        #     return nn.Sequential(
+        #         nn.Upsample(scale_factor=2, mode='nearest'),
+        #         nn.Conv2d(in_planes, out_planes*2, 3, 1, 1, bias=False),
+        #         nn.BatchNorm2d(out_planes*2),
+        #         nn.GLU(dim=1)
+
+        self.main = nn.Sequential(
+            nn.AdaptiveAvgPool2d(8),
+            UpBlock(nfc_in, nfc[16]),
+            UpBlock(nfc[16], nfc[32]),
+            UpBlock(nfc[32], nfc[64]),
+            #UpBlock(nfc[64], nfc[128]),
+            nn.Conv2d(nfc[64], nc, 3, 1, 1, bias=False),
+            nn.Tanh()
+        )
+
+    def forward(self, input):
+        # input shape: c x 4 x 4
+        return self.main(input)
 
 
 class DiscriminatorOld(nn.Module):

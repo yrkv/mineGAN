@@ -23,6 +23,9 @@ from tqdm import tqdm
 import model
 # from diffaug import DiffAugment
 # policy = 'color,translation'
+import lpips
+#TODO: try other perceptual losses
+percept = lpips.LPIPS(net='vgg')
 
 
 criterion = nn.BCELoss()
@@ -52,19 +55,23 @@ def near_zero_like(input, rand_range=0.1):
     return torch.rand_like(input)*rand_range
 
 def train_d(net, data, label="real"):
-    pred = net(data)
+    pred, *rec = net(data, label=label)
+
     if pred.dim() > 1:
         pred_mean = pred.mean(list(range(1, pred.dim()))).round()
     else:
         pred_mean = pred.round()
+
     if label=="real":
         target = near_zero_like(pred)
         target_mean = 0
+        err = criterion(pred, target) + \
+                percept(rec[0], F.interpolate(data, rec[0].size()[-2:])).sum()
     else:
         target = near_one_like(pred)
         target_mean = 1
+        err = criterion(pred, target)
 
-    err = criterion(pred, target)
     err.backward()
 
     p_correct = (pred_mean == target_mean).float().mean()
@@ -157,7 +164,7 @@ def train(args):
 
             # train Generator
             netG.zero_grad()
-            pred_g = netD(fake_images)
+            pred_g, = netD(fake_images)
 #             err_g = -pred_g.mean()
             target = near_zero_like(pred_g)
             err_g = criterion(pred_g, target)
