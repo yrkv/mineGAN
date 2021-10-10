@@ -102,6 +102,8 @@ def train(args):
         name = ''.join(np.random.choice(list(string.ascii_lowercase), size=10, replace=False))
     save_dir = os.path.join(args['results_dir'], name)
 
+    percept.to(device)
+
     # make sure output directories exist
     os.makedirs(os.path.join(save_dir, 'checkpoints'), exist_ok=True)
     os.makedirs(os.path.join(save_dir, 'images'), exist_ok=True)
