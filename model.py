@@ -111,7 +111,11 @@ class Generator(nn.Module):
         self.feat_32 = self.up_block(nfc[16], nfc[32])
         self.feat_64 = self.up_block(nfc[32], nfc[64])
         self.feat_128 = self.up_block(nfc[64], nfc[128])
-        #self.feat_128 = self.up_block(nfc[64], nfc[128])
+        self.feat_256 = self.up_block(nfc[128], nfc[256])
+
+        self.se_64  = SEBlock(nfc[4], nfc[64])
+        self.se_128 = SEBlock(nfc[8], nfc[128])
+        self.se_256 = SEBlock(nfc[16], nfc[256])
 
 
         #self.se_32 = SEBlock(nfc[8], nfc[32])
@@ -127,9 +131,9 @@ class Generator(nn.Module):
         #)
 
         self.to_256 = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(nfc[128], nc, 3, 1, 1, bias=False),
-            #nn.Conv2d(nfc[256], nc, 3, 1, 1, bias=False),
+            #nn.Upsample(scale_factor=2, mode='nearest'),
+            #nn.Conv2d(nfc[128], nc, 3, 1, 1, bias=False),
+            nn.Conv2d(nfc[256], nc, 3, 1, 1, bias=False),
             nn.Tanh(),
         )
 
@@ -146,11 +150,16 @@ class Generator(nn.Module):
         #feat_64 = self.se_64(feat_16, self.feat_64(feat_32))
 
         feat_32 = self.feat_32(feat_16)
-        feat_64 = self.feat_64(feat_32)
-        feat_128 = self.feat_128(feat_64)
+        #feat_64 = self.feat_64(feat_32)
+        #feat_128 = self.feat_128(feat_64)
+
+
+        feat_64 = self.se_64(feat_4, self.feat_64(feat_32))
+        feat_128 = self.se_128(feat_8, self.feat_128(feat_64))
+        feat_256 = self.se_256(feat_16, self.feat_256(feat_128))
 
         #return self.to_64(feat_64)
-        return self.to_256(feat_128)
+        return self.to_256(feat_256)
 
 
 class GeneratorOld(nn.Module):
