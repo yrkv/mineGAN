@@ -114,9 +114,9 @@ class Generator(nn.Module):
         self.feat_128 = self.up_block(nfc[64], nfc[128])
         self.feat_256 = self.up_block(nfc[128], nfc[256])
 
-        self.se_64  = SEBlock(nfc[4], nfc[64])
-        self.se_128 = SEBlock(nfc[8], nfc[128])
-        self.se_256 = SEBlock(nfc[16], nfc[256])
+        #self.se_64  = SEBlock(nfc[4], nfc[64])
+        #self.se_128 = SEBlock(nfc[8], nfc[128])
+        #self.se_256 = SEBlock(nfc[16], nfc[256])
 
 
         #self.se_32 = SEBlock(nfc[8], nfc[32])
@@ -151,13 +151,14 @@ class Generator(nn.Module):
         #feat_64 = self.se_64(feat_16, self.feat_64(feat_32))
 
         feat_32 = self.feat_32(feat_16)
-        #feat_64 = self.feat_64(feat_32)
-        #feat_128 = self.feat_128(feat_64)
+        feat_64 = self.feat_64(feat_32)
+        feat_128 = self.feat_128(feat_64)
+        feat_256 = self.feat_256(feat_128)
 
 
-        feat_64 = self.se_64(feat_4, self.feat_64(feat_32))
-        feat_128 = self.se_128(feat_8, self.feat_128(feat_64))
-        feat_256 = self.se_256(feat_16, self.feat_256(feat_128))
+        #feat_64 = self.se_64(feat_4, self.feat_64(feat_32))
+        #feat_128 = self.se_128(feat_8, self.feat_128(feat_64))
+        #feat_256 = self.se_256(feat_16, self.feat_256(feat_128))
 
         #return self.to_64(feat_64)
         return self.to_256(feat_256)
@@ -278,17 +279,37 @@ class Discriminator(nn.Module):
         self.down_to_32 = DownBlock(nfc[64], nfc[32], dropout)
         self.down_to_16 = DownBlock(nfc[32], nfc[16], dropout)
         self.down_to_8 = DownBlock(nfc[16], nfc[8], dropout)
-        self.down_to_4 = DownBlock(nfc[8], nfc[4], dropout)
+        #self.down_to_4 = DownBlock(nfc[8], nfc[4], dropout)
 
         self.rf_main = nn.Sequential(
-            nn.Conv2d(nfc[4], 1, 4, 1, 0, bias=False),
+            nn.Conv2d(nfc[8], 1, 4, 1, 0, bias=False),
+            nn.Sigmoid(),
+        )
+
+
+        self.down_from_small = nn.Sequential(
+            nn.Conv2d(nc, nfc[32], 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            DownBlock(nfc[32], nfc[16]),
+            DownBlock(nfc[16], nfc[8]),
+        )
+
+        self.rf_small = nn.Sequential(
+            nn.Conv2d(nfc[8], 1, 4, 1, 0, bias=False),
             nn.Sigmoid(),
         )
 
         # decoder applied to end of main backbone
         self.decoder_big = SimpleDecoder(nfc[8], nc, ndf=ndf)
+        # decoder applied to randomly selected part
+        self.decoder_part = SimpleDecoder(nfc[16], nc, ndf=ndf)
+        # decoder applied to simpler/smaller backbone
+        self.decoder_small = SimpleDecoder(nfc[8], nc, ndf=ndf)
 
-    def forward(self, image, label='fake'):
+        self.apply(weights_init)
+
+
+    def forward(self, image, label='fake', part=None):
         #if self.training and self.config['d_noise'] > 0:
             #x = x + self.config['d_noise']*torch.randn_like(x)
 
@@ -297,16 +318,25 @@ class Discriminator(nn.Module):
         feat_32 = self.down_to_32(feat_64)
         feat_16 = self.down_to_16(feat_32)
         feat_8 = self.down_to_8(feat_16)
-        feat_4 = self.down_to_4(feat_8)
+        #feat_4 = self.down_to_4(feat_8)
 
-        rf = self.rf_main(feat_4)
+        rf_0 = self.rf_main(feat_8)
 
         small_image = F.interpolate(image, size=64)
+        feat_small = self.down_from_small(small_image)
+        rf_1 = self.rf_small(feat_small)
+
+        rf = torch.cat([rf_0, rf_1], dim=1)
 
         if label == 'real':
             rec_img_big = self.decoder_big(feat_8)
+            rec_img_small = self.decoder_small(feat_small)
 
-            return rf, rec_img_big
+            assert part is not None
+            y_slice, x_slice = part
+            rec_img_part = self.decoder_part(feat_16[:, :, y_slice, x_slice])
+
+            return rf, rec_img_big, rec_img_small, rec_img_part
 
         return rf,
 

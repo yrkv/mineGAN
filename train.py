@@ -27,7 +27,6 @@ import lpips
 #TODO: try other perceptual losses
 percept = lpips.LPIPS(net='vgg')
 
-
 criterion = nn.BCELoss()
 model_config_args = {
     'nc', 'nz', 'ngf', 'ndf', 'lr', 'beta1',
@@ -47,6 +46,29 @@ model_config_args = {
 #            m.p = p
 #    model.apply(to_apply)
 
+small_quarter_parts = [
+    (slice(None,8), slice(None,8)),
+    (slice(None,8), slice(8,None)),
+    (slice(8,None), slice(None,8)),
+    (slice(8,None), slice(8,None)),
+]
+
+def scale_slice(in_slice, from_scale=8, to_scale=64):
+    start, stop = in_slice.start, in_slice.stop
+    if start is not None:
+        start = start * to_scale // from_scale
+    if stop is not None:
+        stop = stop * to_scale // from_scale
+    return slice(start, stop)
+
+def get_quarter_parts(hw=256, part=None):
+    if part is None:
+        part = random.randint(0, 3)
+
+    small_part = small_quarter_parts[part]
+    big_part = scale_slice(small_part[0]), scale_slice(small_part[1])
+    return small_part, big_part
+
 
 def near_one_like(input, rand_range=0.1):
     return 1 - torch.rand_like(input)*rand_range
@@ -55,7 +77,8 @@ def near_zero_like(input, rand_range=0.1):
     return torch.rand_like(input)*rand_range
 
 def train_d(net, data, label="real"):
-    pred, *rec = net(data, label=label)
+    small_part, big_part = get_quarter_parts()
+    pred, *rec = net(data, label=label, part=small_part)
 
     if pred.dim() > 1:
         pred_mean = pred.mean(list(range(1, pred.dim()))).round()
@@ -65,8 +88,14 @@ def train_d(net, data, label="real"):
     if label=="real":
         target = near_zero_like(pred)
         target_mean = 0
+        #print(rec[0].shape, rec[1].shape, rec[2].shape)
+        #print(small_part, big_part)
+        #data_part = data[:,:,big_part[0], big_part[1]]
+        #print(data_part.shape)
         err = criterion(pred, target) + \
-                percept(rec[0], F.interpolate(data, rec[0].size()[-2:])).sum()
+                percept(rec[0], F.interpolate(data, rec[0].size()[-2:])).sum() + \
+                percept(rec[1], F.interpolate(data, rec[1].size()[-2:])).sum() + \
+                percept(rec[2], F.interpolate(data[:,:,big_part[0],big_part[1]], rec[2].size()[-2:])).sum()
     else:
         target = near_one_like(pred)
         target_mean = 1
