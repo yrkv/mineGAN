@@ -92,10 +92,10 @@ def train_d(net, data, label="real"):
         #print(small_part, big_part)
         #data_part = data[:,:,big_part[0], big_part[1]]
         #print(data_part.shape)
-        err = criterion(pred, target) + \
+        err = criterion(pred, target) + 0.1*( \
                 percept(rec[0], F.interpolate(data, rec[0].size()[-2:])).sum() + \
                 percept(rec[1], F.interpolate(data, rec[1].size()[-2:])).sum() + \
-                percept(rec[2], F.interpolate(data[:,:,big_part[0],big_part[1]], rec[2].size()[-2:])).sum()
+                percept(rec[2], F.interpolate(data[:,:,big_part[0],big_part[1]], rec[2].size()[-2:])).sum())
     else:
         target = near_one_like(pred)
         target_mean = 1
