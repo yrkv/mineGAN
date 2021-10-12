@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+nfc_base = {4:32, 8:32, 16:16, 32:16, 64:8, 128:4, 256:2, 512:1}
+
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
@@ -27,29 +30,33 @@ class SEBlock(nn.Module):
         return large * self.main(small)
 
 
-# TODO: try other upscaling blocks
 def UpBlock(in_ch, out_ch):
     return nn.Sequential(
         nn.Upsample(scale_factor=2, mode='nearest'),
         nn.Conv2d(in_ch, out_ch*2, 3, 1, 1, bias=False),
         nn.BatchNorm2d(out_ch*2),
         nn.GLU(dim=1),
+        #nn.Dropout2d(config['g_dropout']),
+    )
+
+def UpBlockDCGAN(in_ch, out_ch):
+    return nn.Sequential(
+        nn.ConvTranspose2d(ngf*8, ngf*4, 4, 2, 1, bias=False),
+        nn.BatchNorm2d(ngf*4,),
+        nn.ReLU(),
+        #nn.Dropout2d(config['g_dropout']),
     )
 
 class UpBlockDual(nn.Module):
     def __init__(self, in_ch, out_ch):
         super().__init__()
-        self.main = UpBlock(in_ch, out_ch//2)
-        self.dcgan_up = nn.Sequential(
-            nn.ConvTranspose2d(in_ch, out_ch//2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(out_ch//2),
-            nn.ReLU(),
-        )
+        self.main = UpBlock(in_ch, out_ch)
+        self.up_dcgan = UpBlockDCGAN(in_ch, out_ch)
 
     def forward(self, feat):
         a = self.main(feat)
-        b = self.dcgan_up(feat)
-        return torch.cat([a, b], dim=1)
+        b = self.up_dcgan(feat)
+        return (a + b) / 2
 
 
 class UpBlockSkip(nn.Module):
@@ -64,7 +71,7 @@ class UpBlockSkip(nn.Module):
     def forward(self, feat):
         x = self.up(feat)
         y = self.conv(x)
-        #y = self.bn(x + y)
+        y = self.bn(y)
         return self.glu(x + y)
         
 
@@ -78,31 +85,17 @@ class Generator(nn.Module):
         nz = config['nz']
         ngf = config['ngf']
 
-        nfc_base = {4:64, 8:32, 16:16, 32:8, 64:4, 128:2, 256:1}
         nfc = {k:int(v*ngf) for k,v in nfc_base.items()}
 
         self.init = nn.Sequential(
             nn.ConvTranspose2d(nz, nfc[4]*2, 4, 1, 0, bias=False),
             nn.BatchNorm2d(nfc[4]*2),
             nn.GLU(dim=1),
-            # nn.SiLU(inplace=True),
-            
-#             nn.ConvTranspose2d(nfc[4], nfc[4], 3, 1, 1, bias=False),
-#             nn.BatchNorm2d(nfc[4]),
-#             nn.GLU(dim=1),
-            # nn.ConvTranspose2d(nz, nfc[4], 4, 1, 0, bias=False),
-            # nn.BatchNorm2d(nfc[4]),
-            # nn.ReLU(),
-            # nn.Dropout2d(dropout),
-
-            # nn.ConvTranspose2d(nfc[4], nfc[8], 4, 2, 1, bias=False),
-            # nn.BatchNorm2d(nfc[8]),
-            # nn.ReLU(),
-            # nn.Dropout2d(dropout),
         )
 
         self.up_block = {
             'UpBlock': UpBlock,
+            'UpBlockDCGAN': UpBlockDCGAN,
             'UpBlockSkip': UpBlockSkip,
             'UpBlockDual': UpBlockDual,
         }[config['g_up_block']]
@@ -252,9 +245,9 @@ def DownBlock(in_planes, out_planes, dropout=0.0):
         nn.Dropout2d(dropout),
     )
 
-
-# TODO: train as encoder
-#  - try both perceptual loss and pixel loss
+def select_part(feat, part):
+    #TODO: properly implement select_part
+    return feat[:, :, 0:8, 0:8]
 
 class Discriminator(nn.Module):
     def __init__(self, config):
@@ -266,7 +259,69 @@ class Discriminator(nn.Module):
 
         dropout = config['d_dropout']
 
-        nfc_base = {4:64, 8:32, 16:16, 32:8, 64:4, 128:2, 256:1}
+        nfc = {k:int(v*ndf) for k,v in nfc_base.items()}
+
+        self.start_block = nn.Sequential(
+            nn.Conv2d(nc, nfc[256], 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout2d(dropout),
+        )
+
+        self.down_to_128 = DownBlock(nfc[256], nfc[128], dropout)
+        self.down_to_64 = DownBlock(nfc[128], nfc[64], dropout)
+        self.down_to_32 = DownBlock(nfc[64], nfc[32], dropout)
+        self.down_to_16 = DownBlock(nfc[32], nfc[16], dropout)
+        self.down_to_8 = DownBlock(nfc[16], nfc[8], dropout)
+        #self.down_to_4 = DownBlock(nfc[8], nfc[4], dropout)
+
+        self.rf_main = nn.Sequential(
+            nn.Conv2d(nfc[8], 1, 4, 1, 0, bias=False),
+            nn.Sigmoid(),
+        )
+
+        self.decoder_8 = SimpleDecoder(nfc[8], nc, ndf=8) # 512
+        self.decoder_16 = SimpleDecoder(nfc[16], nc, ndf=8) # 256
+        self.decoder_32 = SimpleDecoder(nfc[32], nc, ndf=8) # 128
+        self.decoder_64 = SimpleDecoder(nfc[64], nc, ndf=8) # 64
+
+        self.apply(weights_init)
+
+
+    def forward(self, image, label='fake', part=None):
+
+        feat_256 = self.start_block(image)
+        feat_128 = self.down_to_128(feat_256)
+        feat_64 = self.down_to_64(feat_128)
+        feat_32 = self.down_to_32(feat_64)
+        feat_16 = self.down_to_16(feat_32)
+        feat_8 = self.down_to_8(feat_16)
+
+        rf = self.rf_main(feat_8)
+
+        if label == 'real':
+            assert part is not None
+            rec_8 = self.decoder_8(feat_8)
+            rec_16 = self.decoder_16(select_part(feat_16, part))
+            rec_32 = self.decoder_32(select_part(feat_32, part))
+            rec_64 = self.decoder_64(select_part(feat_64, part))
+
+            return rf, rec_8, rec_16, rec_32, rec_64
+
+        return rf,
+
+# TODO: train as encoder
+#  - try both perceptual loss and pixel loss
+
+class Discriminator_(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        nc = config['nc']
+        ndf = config['ndf']
+
+        dropout = config['d_dropout']
+
         nfc = {k:int(v*ndf) for k,v in nfc_base.items()}
 
         self.start_block = nn.Sequential(
@@ -345,7 +400,6 @@ class SimpleDecoder(nn.Module):
     def __init__(self, nfc_in=64, nc=3, ndf=16):
         super(SimpleDecoder, self).__init__()
 
-        nfc_base = {4:64, 8:32, 16:16, 32:8, 64:4, 128:2, 256:1}
         nfc = {k:int(v*ndf) for k,v in nfc_base.items()}
 
         # def upBlock(in_planes, out_planes):
