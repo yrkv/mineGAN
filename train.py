@@ -104,11 +104,12 @@ def train_d(net, data, label="real"):
                 #percept(rec[1], F.interpolate(data, rec[1].size()[-2:])).sum() + \
                 #percept(rec[2], F.interpolate(data[:,:,big_part[0],big_part[1]], rec[2].size()[-2:])).sum())
         err_d = criterion(pred, target)
-        err_rec = percept(rec[0], get_part(data, 0, 8)).sum() + \
-                percept(rec[1], get_part(data, 0, 16)).sum() + \
-                percept(rec[2], get_part(data, 0, 32)).sum() + \
-                percept(rec[3], get_part(data, 0, 64)).sum()
-        err = err_d / err_d.sum().detach() + err_rec / err_rec.sum().detach()
+        #err_rec = percept(rec[0], get_part(data, 0, 8)).sum() + \
+                #percept(rec[1], get_part(data, 0, 16)).sum() + \
+                #percept(rec[2], get_part(data, 0, 32)).sum() + \
+                #percept(rec[3], get_part(data, 0, 64)).sum()
+        #err = err_d / err_d.sum().detach() + err_rec / err_rec.sum().detach()
+        err = err_d
     else:
         target = near_one_like(pred)
         target_mean = 1

@@ -281,10 +281,10 @@ class Discriminator(nn.Module):
             nn.Sigmoid(),
         )
 
-        self.decoder_8 = SimpleDecoder(nfc[8], nc, ndf=8) # 512
-        self.decoder_16 = SimpleDecoder(nfc[16], nc, ndf=8) # 256
-        self.decoder_32 = SimpleDecoder(nfc[32], nc, ndf=8) # 128
-        self.decoder_64 = SimpleDecoder(nfc[64], nc, ndf=8) # 64
+        #self.decoder_8 = SimpleDecoder(nfc[8], nc, ndf=8) # 512
+        #self.decoder_16 = SimpleDecoder(nfc[16], nc, ndf=8) # 256
+        #self.decoder_32 = SimpleDecoder(nfc[32], nc, ndf=8) # 128
+        #self.decoder_64 = SimpleDecoder(nfc[64], nc, ndf=8) # 64
 
         self.apply(weights_init)
 
@@ -300,14 +300,14 @@ class Discriminator(nn.Module):
 
         rf = self.rf_main(feat_8)
 
-        if label == 'real':
-            assert part is not None
-            rec_8 = self.decoder_8(feat_8)
-            rec_16 = self.decoder_16(select_part(feat_16, part))
-            rec_32 = self.decoder_32(select_part(feat_32, part))
-            rec_64 = self.decoder_64(select_part(feat_64, part))
+        #if label == 'real':
+        #    assert part is not None
+        #    rec_8 = self.decoder_8(feat_8)
+        #    rec_16 = self.decoder_16(select_part(feat_16, part))
+        #    rec_32 = self.decoder_32(select_part(feat_32, part))
+        #    rec_64 = self.decoder_64(select_part(feat_64, part))
 
-            return rf, rec_8, rec_16, rec_32, rec_64
+        #    return rf, rec_8, rec_16, rec_32, rec_64
 
         return rf,
 
