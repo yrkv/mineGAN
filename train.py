@@ -92,6 +92,7 @@ def train_d(net, data, label="real", d_encoder=0):
     else:
         pred_mean = pred.round()
 
+    err_rec = 0
     if label=="real":
         target = near_zero_like(pred)
         target_mean = 0
@@ -111,6 +112,7 @@ def train_d(net, data, label="real", d_encoder=0):
             err_rec += percept(rec[1], slice_big_part(data, 16, part)).sum()
             err_rec += percept(rec[2], slice_big_part(data, 32, part)).sum()
             err_rec += percept(rec[3], slice_big_part(data, 64, part)).sum()
+            err_rec /= 4
 
         if d_encoder == 0:
             err.backward()
@@ -125,7 +127,12 @@ def train_d(net, data, label="real", d_encoder=0):
         err.backward()
 
     p_correct = (pred_mean == target_mean).float().mean()
-    return err.mean().item(), p_correct
+    #return err.mean().item(), err_rec, p_correct
+    return {
+        'err': err.mean().item(),
+        'err_rec': err_rec,
+        'c': p_correct
+    }
 
 
 def load_checkpoint(ckpt, ckpt_dir):
@@ -210,8 +217,8 @@ def train(args):
 
             # train Discriminator
             netD.zero_grad()
-            err_dr, c_dr = train_d(netD, real_images, label="real", d_encoder=config['d_encoder'])
-            err_df, c_df = train_d(netD, fake_images.detach(), label="fake", d_encoder=config['d_encoder'])
+            dr = train_d(netD, real_images, label="real", d_encoder=config['d_encoder'])
+            df = train_d(netD, fake_images.detach(), label="fake", d_encoder=config['d_encoder'])
             optD.step()
 
             # train Generator
@@ -225,23 +232,26 @@ def train(args):
 
 
             epoch_log.append({
-                'err_dr': err_dr,
-                'c_dr': c_dr,
-                'err_df': err_df,
-                'c_df': c_df,
                 'err_g': err_g.item(),
+                **{f'{k}_dr':v for k,v in dr.items()},
+                **{f'{k}_df':v for k,v in df.items()},
             })
 
         
         df = pd.DataFrame(epoch_log)
-        err_dr = df['err_dr'].mean()
-        c_dr = df['c_dr'].mean()
-        err_df = df['err_df'].mean()
-        c_df = df['c_df'].mean()
-        err_g = df['err_g'].mean()
+        log = df.mean()
+
+        err_dr = log['err_dr']
+        err_rec_dr = log['err_rec_dr']
+        c_dr = log['c_dr']
+
+        err_df = log['err_df']
+        c_df = log['c_df']
+
+        err_g = log['err_g']
         t = time.time() - epoch_start_time
         print(f'Epochs: {epoch+1}, {t=:.1f}, '
-                f' {err_dr=:.4f}, {c_dr=:.4f}, '
+                f' {err_dr=:.4f}, {err_rec_rd=:.4f}, {c_dr=:.4f}, '
                 f' {err_df=:.4f}, {c_df=:.4f}, '
                 f' {err_g=:.4f}')
 
