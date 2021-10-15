@@ -247,9 +247,21 @@ def DownBlock(in_planes, out_planes, dropout=0.0):
         nn.Dropout2d(dropout),
     )
 
-def select_part(feat, part):
-    #TODO: properly implement select_part
-    return feat[:, :, 0:8, 0:8]
+
+def select_part(feat_size, part, ws=8):
+    hw = feat_size - ws
+    if hw == 0:
+        return 0, 0
+
+    y = part // hw % hw
+    x = part % hw
+
+    return y, x
+
+def slice_small_part(small_t, k, part, ws=8):
+    x, y = select_part(k, part, ws=ws)
+    return small_t[:, :, y:y+ws, x:x+ws]
+
 
 class Discriminator(nn.Module):
     def __init__(self, config):
@@ -281,10 +293,12 @@ class Discriminator(nn.Module):
             nn.Sigmoid(),
         )
 
-        #self.decoder_8 = SimpleDecoder(nfc[8], nc, ndf=8) # 512
-        #self.decoder_16 = SimpleDecoder(nfc[16], nc, ndf=8) # 256
-        #self.decoder_32 = SimpleDecoder(nfc[32], nc, ndf=8) # 128
-        #self.decoder_64 = SimpleDecoder(nfc[64], nc, ndf=8) # 64
+        if config['d_encoder'] > 0:
+            self.decoder_512 = SimpleDecoder(nfc[8], nc, ndf=8) # 512
+        if config['d_encoder'] > 1:
+            self.decoder_256 = SimpleDecoder(nfc[16], nc, ndf=8) # 256
+            self.decoder_128 = SimpleDecoder(nfc[32], nc, ndf=8) # 128
+            self.decoder_64 = SimpleDecoder(nfc[64], nc, ndf=8) # 64
 
         self.apply(weights_init)
 
@@ -300,14 +314,18 @@ class Discriminator(nn.Module):
 
         rf = self.rf_main(feat_8)
 
-        #if label == 'real':
-        #    assert part is not None
-        #    rec_8 = self.decoder_8(feat_8)
-        #    rec_16 = self.decoder_16(select_part(feat_16, part))
-        #    rec_32 = self.decoder_32(select_part(feat_32, part))
-        #    rec_64 = self.decoder_64(select_part(feat_64, part))
+        if label == 'real':
+            rec = []
+            if self.config['d_encoder'] > 0:
+                rec.append(self.decoder_512(feat_8))
 
-        #    return rf, rec_8, rec_16, rec_32, rec_64
+            if self.config['d_encoder'] > 1:
+                assert part is not None
+                rec.append(self.decoder_256(slice_small_part(feat_16, 16, part)))
+                rec.append(self.decoder_128(slice_small_part(feat_32, 32, part)))
+                rec.append(self.decoder_64(slice_small_part(feat_64, 64, part)))
+
+            return rf, *rec
 
         return rf,
 

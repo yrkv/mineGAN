@@ -33,6 +33,7 @@ model_config_args = {
 
     'd_dropout',
     #'d_noise',
+    'd_encoder',
 
     #'g_dropout',
     'g_up_block',
@@ -69,12 +70,11 @@ model_config_args = {
 #    big_part = scale_slice(small_part[0]), scale_slice(small_part[1])
 #    return small_part, big_part
 
-def get_part(image, part, k, to_size=64):
-    from_size = 512 * 8 // k
-
-    selected = image[:,:,0:from_size,0:from_size]
-
-    return F.interpolate(selected, to_size)
+def slice_big_part(big_t, k, part, ws=8, target_size=64):
+    x, y = model.select_part(k, part, ws=ws)
+    scale = 512 // k
+    sliced = big_t[:, :, scale*(y):scale*(y+ws), scale*(x):scale*(x+ws)]
+    return F.interpolate(sliced, target_size)
 
 
 def near_one_like(input, rand_range=0.1):
@@ -83,7 +83,7 @@ def near_one_like(input, rand_range=0.1):
 def near_zero_like(input, rand_range=0.1):
     return torch.rand_like(input)*rand_range
 
-def train_d(net, data, label="real"):
+def train_d(net, data, label="real", d_encoder=0):
     #small_part, big_part = get_quarter_parts()
     pred, *rec = net(data, label=label, part=0)
 
@@ -103,19 +103,26 @@ def train_d(net, data, label="real"):
                 #percept(rec[0], F.interpolate(data, rec[0].size()[-2:])).sum() + \
                 #percept(rec[1], F.interpolate(data, rec[1].size()[-2:])).sum() + \
                 #percept(rec[2], F.interpolate(data[:,:,big_part[0],big_part[1]], rec[2].size()[-2:])).sum())
-        err_d = criterion(pred, target)
-        #err_rec = percept(rec[0], get_part(data, 0, 8)).sum() + \
-                #percept(rec[1], get_part(data, 0, 16)).sum() + \
-                #percept(rec[2], get_part(data, 0, 32)).sum() + \
-                #percept(rec[3], get_part(data, 0, 64)).sum()
-        #err = err_d / err_d.sum().detach() + err_rec / err_rec.sum().detach()
-        err = err_d
+        err = criterion(pred, target)
+        part = int(torch.randint(low=0, high=99999999, size=(1,))[0])
+        if d_encoder > 0:
+            err_rec = percept(rec[0], slice_big_part(data, 8, part)).sum()
+        if d_encoder > 1:
+            err_rec += percept(rec[1], slice_big_part(data, 16, part)).sum()
+            err_rec += percept(rec[2], slice_big_part(data, 32, part)).sum()
+            err_rec += percept(rec[3], slice_big_part(data, 64, part)).sum()
+
+        if d_encoder == 0:
+            err.backward()
+        else:
+            err_composite = err + err_rec / err_rec.sum().detach()
+            err_composite.backward()
+
     else:
         target = near_one_like(pred)
         target_mean = 1
         err = criterion(pred, target)
-
-    err.backward()
+        err.backward()
 
     p_correct = (pred_mean == target_mean).float().mean()
     return err.mean().item(), p_correct
@@ -203,8 +210,8 @@ def train(args):
 
             # train Discriminator
             netD.zero_grad()
-            err_dr, c_dr = train_d(netD, real_images, label="real")
-            err_df, c_df = train_d(netD, fake_images.detach(), label="fake")
+            err_dr, c_dr = train_d(netD, real_images, label="real", d_encoder=config['d_encoder'])
+            err_df, c_df = train_d(netD, fake_images.detach(), label="fake", d_encoder=config['d_encoder'])
             optD.step()
 
             # train Generator
@@ -286,6 +293,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--d_dropout', type=float, default=0.0, help='')
     #parser.add_argument('--d_noise', type=float, default=0.0, help='')
+    parser.add_argument('--d_encoder', type=int, default=0,
+            help='Configure training the Discriminator as an encoder. 0 disables training as encoder, '
+            '1 enables only the full image encoder, 2 enables full.')
 
     #parser.add_argument('--g_dropout', type=float, default=0.0, help='')
     parser.add_argument('--g_up_block', type=str, default='UpBlock', help='')
