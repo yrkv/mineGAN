@@ -251,7 +251,7 @@ def train(args):
         err_g = log['err_g']
         t = time.time() - epoch_start_time
         print(f'Epochs: {epoch+1}, {t=:.1f}, '
-                f' {err_dr=:.4f}, {err_rec_rd=:.4f}, {c_dr=:.4f}, '
+                f' {err_dr=:.4f}, {err_rec_dr=:.4f}, {c_dr=:.4f}, '
                 f' {err_df=:.4f}, {c_df=:.4f}, '
                 f' {err_g=:.4f}')
 
