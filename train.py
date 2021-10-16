@@ -210,7 +210,7 @@ def train(args):
 
             # train Discriminator
             netD.zero_grad()
-            dr, _ = train_d(netD, real_images, label="real", d_encoder=config['d_encoder'])
+            dr, rec = train_d(netD, real_images, label="real", d_encoder=config['d_encoder'])
             df, _ = train_d(netD, fake_images.detach(), label="fake", d_encoder=config['d_encoder'])
             optD.step()
 
@@ -229,6 +229,7 @@ def train(args):
                 **{f'{k}_dr':v for k,v in dr.items()},
                 **{f'{k}_df':v for k,v in df.items()},
             })
+            break
 
         
         df = pd.DataFrame(epoch_log)
