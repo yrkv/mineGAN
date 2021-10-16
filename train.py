@@ -229,7 +229,6 @@ def train(args):
                 **{f'{k}_dr':v for k,v in dr.items()},
                 **{f'{k}_df':v for k,v in df.items()},
             })
-            break
 
         
         df = pd.DataFrame(epoch_log)
