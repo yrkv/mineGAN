@@ -85,39 +85,32 @@ def near_zero_like(input, rand_range=0.1):
 
 def train_d(net, data, label="real", d_encoder=0):
     #small_part, big_part = get_quarter_parts()
-    pred, *rec = net(data, label=label, part=0)
+    part = int(torch.randint(low=0, high=99999999, size=(1,))[0])
+    pred, *rec = net(data, label=label, part=part)
+
 
     if pred.dim() > 1:
         pred_mean = pred.mean(list(range(1, pred.dim()))).round()
     else:
         pred_mean = pred.round()
 
-    err_rec = 0
+    err_rec = []
     if label=="real":
         target = near_zero_like(pred)
         target_mean = 0
-        #print(rec[0].shape, rec[1].shape, rec[2].shape)
-        #print(small_part, big_part)
-        #data_part = data[:,:,big_part[0], big_part[1]]
-        #print(data_part.shape)
-        #err = criterion(pred, target) + 0.1*( \
-                #percept(rec[0], F.interpolate(data, rec[0].size()[-2:])).sum() + \
-                #percept(rec[1], F.interpolate(data, rec[1].size()[-2:])).sum() + \
-                #percept(rec[2], F.interpolate(data[:,:,big_part[0],big_part[1]], rec[2].size()[-2:])).sum())
         err = criterion(pred, target)
-        part = int(torch.randint(low=0, high=99999999, size=(1,))[0])
         if d_encoder > 0:
-            err_rec = percept(rec[0], slice_big_part(data, 8, part)).sum()
+            err_rec.append( percept(rec[0], slice_big_part(data, 8, part)).sum() )
         if d_encoder > 1:
-            err_rec += percept(rec[1], slice_big_part(data, 16, part)).sum()
-            err_rec += percept(rec[2], slice_big_part(data, 32, part)).sum()
-            err_rec += percept(rec[3], slice_big_part(data, 64, part)).sum()
-            err_rec /= 4
+            err_rec.append( percept(rec[1], slice_big_part(data, 16, part)).sum() )
+            err_rec.append( percept(rec[2], slice_big_part(data, 32, part)).sum() )
+            err_rec.append( percept(rec[3], slice_big_part(data, 64, part)).sum() )
 
         if d_encoder == 0:
             err.backward()
         else:
-            err_composite = err + err_rec / err_rec.sum().detach()
+            err_rec_mean = sum(err_rec) / len(err_rec)
+            err_composite = err + err_rec_mean / err_rec_mean.sum().detach()
             err_composite.backward()
 
     else:
@@ -130,9 +123,9 @@ def train_d(net, data, label="real", d_encoder=0):
     #return err.mean().item(), err_rec, p_correct
     return {
         'err': err.mean().item(),
-        'err_rec': err_rec,
-        'c': p_correct
-    }
+        'c': p_correct,
+        **{f'err_rec_{i}':err_rec[i] for i in range(len(err_rec))},
+    }, rec
 
 
 def load_checkpoint(ckpt, ckpt_dir):
@@ -217,8 +210,8 @@ def train(args):
 
             # train Discriminator
             netD.zero_grad()
-            dr = train_d(netD, real_images, label="real", d_encoder=config['d_encoder'])
-            df = train_d(netD, fake_images.detach(), label="fake", d_encoder=config['d_encoder'])
+            dr, _ = train_d(netD, real_images, label="real", d_encoder=config['d_encoder'])
+            df, _ = train_d(netD, fake_images.detach(), label="fake", d_encoder=config['d_encoder'])
             optD.step()
 
             # train Generator
@@ -242,7 +235,6 @@ def train(args):
         log = df.mean()
 
         err_dr = log['err_dr']
-        err_rec_dr = log['err_rec_dr']
         c_dr = log['c_dr']
 
         err_df = log['err_df']
@@ -251,14 +243,27 @@ def train(args):
         err_g = log['err_g']
         t = time.time() - epoch_start_time
         print(f'Epochs: {epoch+1}, {t=:.1f}, '
-                f' {err_dr=:.4f}, {err_rec_dr=:.4f}, {c_dr=:.4f}, '
+                f' {err_dr=:.4f}, {c_dr=:.4f}, '
                 f' {err_df=:.4f}, {c_df=:.4f}, '
                 f' {err_g=:.4f}')
+
+        to_out = []
+        for i in range(4):
+            if f'err_rec_{i}_dr' in log:
+                value = log[f'err_rec_{i}_dr']
+                out.append(f'err_rec_{i}_dr={value}')
+        print(' '.join(to_out))
+
 
         with torch.no_grad():
             im = to_pil_image(make_grid(netG(fixed_noise), normalize=True, value_range=(-1,1)))
             image_path = os.path.join(save_dir, f'images/fixed_images_{epoch+1:04}.png')
             im.save(image_path)
+
+            for i, rec_img in enumerate(rec):
+                im = to_pil_image(make_grid(rec_img, normalize=True, value_range=(-1,1)))
+                image_path = os.path.join(save_dir, f'images/rec_{i}_{epoch+1:04}.png')
+                im.save(image_path)
 
         # checkpoint every (--ckpt_every) epochs
         if args['ckpt_every'] != 0 and (epoch+1) % args['ckpt_every'] == 0:
