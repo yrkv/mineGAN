@@ -251,7 +251,7 @@ def train(args):
         for i in range(4):
             if f'err_rec_{i}_dr' in log:
                 value = log[f'err_rec_{i}_dr']
-                out.append(f'err_rec_{i}_dr={value}')
+                to_out.append(f'err_rec_{i}_dr={value}')
         print(' '.join(to_out))
 
 
