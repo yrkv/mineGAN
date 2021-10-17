@@ -110,7 +110,8 @@ def train_d(net, data, label="real", d_encoder=0):
             err.backward()
         else:
             err_rec_mean = sum(err_rec) / len(err_rec)
-            err_composite = err + err_rec_mean / err_rec_mean.sum().detach()
+            #err_composite = err + err_rec_mean / err_rec_mean.sum().detach()
+            err_composite = err + err_rec_mean*0.1
             err_composite.backward()
 
     else:
@@ -251,7 +252,7 @@ def train(args):
         for i in range(4):
             if f'err_rec_{i}_dr' in log:
                 value = log[f'err_rec_{i}_dr']
-                to_out.append(f'err_rec_{i}_dr={value}')
+                to_out.append(f'err_rec_{i}_dr={value:.4f}')
         print(' '.join(to_out))
 
 
