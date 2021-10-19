@@ -37,6 +37,7 @@ model_config_args = {
 
     #'g_dropout',
     'g_up_block',
+    'g_skip',
 }
 
 
@@ -315,6 +316,8 @@ if __name__ == "__main__":
 
     #parser.add_argument('--g_dropout', type=float, default=0.0, help='')
     parser.add_argument('--g_up_block', type=str, default='UpBlock', help='')
+    parser.add_argument('--g_skip', type=int, default=0,
+            help='Relative scales of skip connections. 0 disables; original paper uses 16');
 
 
 #     'BN_momentum': 0.8,

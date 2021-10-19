@@ -100,30 +100,24 @@ class Generator(nn.Module):
             'UpBlockDual': UpBlockDual,
         }[config['g_up_block']]
 
-        self.feat_8 = self.up_block(nfc[4], nfc[8])
-        self.feat_16 = self.up_block(nfc[8], nfc[16])
-        self.feat_32 = self.up_block(nfc[16], nfc[32])
-        self.feat_64 = self.up_block(nfc[32], nfc[64])
-        self.feat_128 = self.up_block(nfc[64], nfc[128])
-        self.feat_256 = self.up_block(nfc[128], nfc[256])
-        self.feat_512 = self.up_block(nfc[256], nfc[512])
+        self.feat = {
+            8: (self.up_block(nfc[4], nfc[8]), 4),
+            16: (self.up_block(nfc[8], nfc[16]), 8),
+            32: (self.up_block(nfc[16], nfc[32]), 16),
+            64: (self.up_block(nfc[32], nfc[64]), 32),
+            128: (self.up_block(nfc[64], nfc[128]), 64),
+            256: (self.up_block(nfc[128], nfc[256]), 128),
+            512: (self.up_block(nfc[256], nfc[512]), 256),
+        }
 
-        #self.se_64  = SEBlock(nfc[4], nfc[64])
-        #self.se_128 = SEBlock(nfc[8], nfc[128])
-        #self.se_256 = SEBlock(nfc[16], nfc[256])
-
-
-        #self.se_32 = SEBlock(nfc[8], nfc[32])
-        #self.se_64 = SEBlock(nfc[16], nfc[64])
-
-        # self.feat_64 = UpBlock(nfc[32], nc)
-
-        #self.to_64 = nn.Sequential(
-#             nn.Upsample(scale_factor=2, mode='nearest'),
-#             nn.Conv2d(nfc[32], nc, 3, 1, 1, bias=False),
-            #nn.Conv2d(nfc[64], nc, 3, 1, 1, bias=False),
-            #nn.Tanh(),
-        #)
+        self.skip = {}
+        if config['g_skip'] == 16:
+            self.skip = {
+                64: (SEBlock(nfc[4], nfc[64]), 4),
+                128: (SEBlock(nfc[8], nfc[128]), 8),
+                256: (SEBlock(nfc[16], nfc[256]), 16),
+                512: (SEBlock(nfc[32], nfc[512]), 32),
+            }
 
         self.to_512 = nn.Sequential(
             #nn.Upsample(scale_factor=2, mode='nearest'),
@@ -136,107 +130,17 @@ class Generator(nn.Module):
 
     def forward(self, noise):
         noise = noise.view(noise.shape[0], -1, 1, 1)
+        feat = { 4: self.init(noise) }
 
-        feat_4 = self.init(noise)
-        feat_8 = self.feat_8(feat_4)
-        feat_16 = self.feat_16(feat_8)
+        for k in sorted(self.feat):
+            feat_func, feat_in = self.feat[k]
+            feat[k] = feat_func(feat[feat_in])
 
-        #feat_32 = self.se_32(feat_8, self.feat_32(feat_16))
-        #feat_64 = self.se_64(feat_16, self.feat_64(feat_32))
+            if k in self.skip:
+                skip_func, small_in = self.skip[k]
+                feat[k] = skip_func(feat[small_in], feat[k])
 
-        feat_32 = self.feat_32(feat_16)
-        feat_64 = self.feat_64(feat_32)
-        feat_128 = self.feat_128(feat_64)
-        feat_256 = self.feat_256(feat_128)
-        feat_512 = self.feat_512(feat_256)
-
-
-        #feat_64 = self.se_64(feat_4, self.feat_64(feat_32))
-        #feat_128 = self.se_128(feat_8, self.feat_128(feat_64))
-        #feat_256 = self.se_256(feat_16, self.feat_256(feat_128))
-
-        #return self.to_64(feat_64)
-        return self.to_512(feat_512)
-
-
-class GeneratorOld(nn.Module):
-    def __init__(self, config):
-        super(Generator, self).__init__()
-        self.config = config
-
-        nz = config['nz']
-        ngf = config['ngf']
-        dropout = 0.2 # config['dropout_D']
-        '''
-        self.main = nn.Sequential(
-
-            nn.ConvTranspose2d(nz, ngf*16, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(ngf*16, momentum=BN_momentum),
-            nn.GLU(dim=1),
-#             nn.ReLU(),
-            nn.Dropout2d(dropout),
-
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(ngf*8, ngf*8, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(ngf*8, momentum=BN_momentum),
-            nn.GLU(dim=1),
-#             nn.ReLU(),
-            nn.Dropout2d(dropout),
-            
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(ngf*4, ngf*4, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(ngf*4, momentum=BN_momentum),
-            nn.GLU(dim=1),
-#             nn.ReLU(),
-            nn.Dropout2d(dropout),
-            
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(ngf*2, ngf*2, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(ngf*2, momentum=BN_momentum),
-            nn.GLU(dim=1),
-#             nn.ReLU(),
-            nn.Dropout2d(dropout),
-
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(ngf, 3, 3, 1, 1, bias=False),
-            nn.Tanh(),
-        )
-        '''
-        self.main = nn.Sequential(
-            nn.ConvTranspose2d(nz, ngf*8, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(ngf*8, ),
-            nn.ReLU(),
-            nn.Dropout2d(dropout),
-
-            # nn.ConvTranspose2d(ngf*16, ngf*8, 4, 2, 1, bias=False),
-            # nn.BatchNorm2d(ngf*8, ),
-            # nn.ReLU(),
-            # nn.Dropout2d(dropout),
-            
-            nn.ConvTranspose2d(ngf*8, ngf*4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf*4,),
-            nn.ReLU(),
-            nn.Dropout2d(dropout),
-            
-            nn.ConvTranspose2d(ngf*4, ngf*2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf*2, ),
-            nn.ReLU(),
-            nn.Dropout2d(dropout),
-            
-            nn.ConvTranspose2d(ngf*2, ngf, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf, ),
-            nn.ReLU(),
-            nn.Dropout2d(dropout),
-            
-            nn.ConvTranspose2d(ngf, 3, 4, 2, 1, bias=False),
-            nn.Tanh(),
-        )
-        self.main.apply(weights_init)
-    
-    def forward(self, x):
-        x = x.view(-1, self.config['nz'], 1, 1)
-        return self.main(x)
-
+        return self.to_512(feat[512])
 
 
 def DownBlock(in_planes, out_planes, dropout=0.0):
