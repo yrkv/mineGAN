@@ -21,8 +21,8 @@ from glob import glob
 from tqdm import tqdm
 
 import model
-# from diffaug import DiffAugment
-# policy = 'color,translation'
+from diffaug import DiffAugment
+policy = 'color,translation'
 import lpips
 #TODO: try other perceptual losses
 percept = lpips.LPIPS(net='vgg')
@@ -207,8 +207,8 @@ def train(args):
 
             fake_images = netG(noise)
             #TODO: test DiffAugment
-#             real_images = DiffAugment(real_images, policy=policy)
-#             fake_images = DiffAugment(fake_images, policy=policy)
+            real_images = DiffAugment(real_images, policy=policy)
+            fake_images = DiffAugment(fake_images, policy=policy)
 
             # train Discriminator
             netD.zero_grad()
