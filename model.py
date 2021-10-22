@@ -31,21 +31,25 @@ class SEBlock(nn.Module):
 
 
 def UpBlock(in_ch, out_ch):
-    return nn.Sequential(
+    main = nn.Sequential(
         nn.Upsample(scale_factor=2, mode='nearest'),
         nn.Conv2d(in_ch, out_ch*2, 3, 1, 1, bias=False),
         nn.BatchNorm2d(out_ch*2),
         nn.GLU(dim=1),
-        #nn.Dropout2d(config['g_dropout']),
     )
+    main.in_ch = in_ch
+    main.out_ch = out_ch
+    return main
 
 def UpBlockDCGAN(in_ch, out_ch):
-    return nn.Sequential(
+    main = nn.Sequential(
         nn.ConvTranspose2d(ngf*8, ngf*4, 4, 2, 1, bias=False),
         nn.BatchNorm2d(ngf*4,),
         nn.ReLU(),
-        #nn.Dropout2d(config['g_dropout']),
     )
+    main.in_ch = in_ch
+    main.out_ch = out_ch
+    return main
 
 class UpBlockDual(nn.Module):
     def __init__(self, in_ch, out_ch):
@@ -93,31 +97,25 @@ class Generator(nn.Module):
             nn.GLU(dim=1),
         )
 
-        self.up_block = {
+        up_block = {
             'UpBlock': UpBlock,
             'UpBlockDCGAN': UpBlockDCGAN,
             'UpBlockSkip': UpBlockSkip,
             'UpBlockDual': UpBlockDual,
         }[config['g_up_block']]
 
-        self.feat = {
-            8: (self.up_block(nfc[4], nfc[8]), 4),
-            16: (self.up_block(nfc[8], nfc[16]), 8),
-            32: (self.up_block(nfc[16], nfc[32]), 16),
-            64: (self.up_block(nfc[32], nfc[64]), 32),
-            128: (self.up_block(nfc[64], nfc[128]), 64),
-            256: (self.up_block(nfc[128], nfc[256]), 128),
-            512: (self.up_block(nfc[256], nfc[512]), 256),
-        }
+        self.up_8 = up_block(nfc[4], nfc[8])
+        self.up_16 = up_block(nfc[8], nfc[16])
+        self.up_32 = up_block(nfc[16], nfc[32])
+        self.up_64 = up_block(nfc[32], nfc[64])
+        self.up_128 = up_block(nfc[64], nfc[128])
+        self.up_256 = up_block(nfc[128], nfc[256])
+        self.up_512 = up_block(nfc[256], nfc[512])
 
-        self.skip = {}
-        if config['g_skip'] == 16:
-            self.skip = {
-                64: (SEBlock(nfc[4], nfc[64]), 4),
-                128: (SEBlock(nfc[8], nfc[128]), 8),
-                256: (SEBlock(nfc[16], nfc[256]), 16),
-                512: (SEBlock(nfc[32], nfc[512]), 32),
-            }
+        self.skip_4_64 = SEBlock(nfc[4], nfc[64])
+        self.skip_8_128 = SEBlock(nfc[8], nfc[128])
+        self.skip_16_256 = SEBlock(nfc[16], nfc[256])
+        self.skip_32_512 = SEBlock(nfc[32], nfc[512])
 
         self.to_512 = nn.Sequential(
             #nn.Upsample(scale_factor=2, mode='nearest'),
@@ -130,17 +128,25 @@ class Generator(nn.Module):
 
     def forward(self, noise):
         noise = noise.view(noise.shape[0], -1, 1, 1)
-        feat = { 4: self.init(noise) }
+        feat_4 = self.init(noise)
 
-        for k in sorted(self.feat):
-            feat_func, feat_in = self.feat[k]
-            feat[k] = feat_func(feat[feat_in])
+        feat_8 = self.up_8(feat_4)
+        feat_16 = self.up_16(feat_8)
+        feat_32 = self.up_32(feat_16)
 
-            if k in self.skip:
-                skip_func, small_in = self.skip[k]
-                feat[k] = skip_func(feat[small_in], feat[k])
+        feat_64 = self.up_64(feat_32)
+        feat_64 = self.skip_4_64(feat_4, feat_64)
 
-        return self.to_512(feat[512])
+        feat_128 = self.up_128(feat_64)
+        feat_128 = self.skip_8_128(feat_8, feat_128)
+
+        feat_256 = self.up_256(feat_128)
+        feat_256 = self.skip_16_256(feat_16, feat_256)
+
+        feat_512 = self.up_512(feat_256)
+        feat_512 = self.skip_32_512(feat_32, feat_512)
+
+        return self.to_512(feat_512)
 
 
 def DownBlock(in_planes, out_planes, dropout=0.0):
